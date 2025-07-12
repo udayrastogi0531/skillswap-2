@@ -12,9 +12,9 @@ export default function Home() {
       <HeroSection />
       
       {/* Notification System Demo */}
-      <div className="container mx-auto py-12">
+      {/* <div className="container mx-auto py-12">
         <NotificationDemo />
-      </div>
+      </div> */}
       
       <FeaturesSection />
       <HowItWorksSection />
