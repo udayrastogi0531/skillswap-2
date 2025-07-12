@@ -27,16 +27,16 @@ service cloud.firestore {
     // Swap requests - allow authenticated users to read/write their own requests
     match /swapRequests/{requestId} {
       allow read: if request.auth != null && 
-        (resource.data.requesterUid == request.auth.uid || 
-         resource.data.targetUid == request.auth.uid ||
+        (resource.data.requesterId == request.auth.uid || 
+         resource.data.responderId == request.auth.uid ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.requesterUid;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.requesterId;
       allow update: if request.auth != null && 
-        (resource.data.requesterUid == request.auth.uid || 
-         resource.data.targetUid == request.auth.uid ||
+        (resource.data.requesterId == request.auth.uid || 
+         resource.data.responderId == request.auth.uid ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
       allow delete: if request.auth != null && 
-        (resource.data.requesterUid == request.auth.uid ||
+        (resource.data.requesterId == request.auth.uid ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
     
