@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useFirebaseStore } from "@/store/useFirebaseStore";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeftRight,
   Check,
@@ -56,6 +57,7 @@ import type { SwapRequest, User, SwapStatus } from "@/types";
 
 export default function AdminDashboard() {
   const { user, userRole } = useAuthStore();
+  const { toast } = useToast();
   const {
     adminRequests,
     users,
@@ -171,7 +173,11 @@ export default function AdminDashboard() {
 
   const handleBanUser = async (userId: string) => {
     if (!banReason.trim()) {
-      alert("Please provide a reason for banning the user.");
+      toast({
+        variant: "destructive",
+        title: "Missing Information",
+        description: "Please provide a reason for banning the user."
+      });
       return;
     }
     
@@ -185,10 +191,18 @@ export default function AdminDashboard() {
       setSelectedUser(null);
       // Reload users to reflect the change
       await loadAllUsers();
-      alert("User has been banned successfully.");
+      toast({
+        variant: "success",
+        title: "User Banned",
+        description: "User has been banned successfully."
+      });
     } catch (error) {
       console.error("Error banning user:", error);
-      alert("Failed to ban user. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to ban user. Please try again."
+      });
     }
   };
 
@@ -199,10 +213,18 @@ export default function AdminDashboard() {
       await unbanUser(userId);
       console.log('User unbanned successfully');
       await loadAllUsers();
-      alert("User has been unbanned successfully.");
+      toast({
+        variant: "success",
+        title: "User Unbanned",
+        description: "User has been unbanned successfully."
+      });
     } catch (error) {
       console.error("Error unbanning user:", error);
-      alert("Failed to unban user. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to unban user. Please try again."
+      });
     }
   };
 
@@ -308,10 +330,18 @@ export default function AdminDashboard() {
       await updateUserProfile(userId, { isVerified: !currentStatus });
       console.log('User verification status updated successfully');
       await loadAllUsers();
-      alert(`User has been ${!currentStatus ? 'verified' : 'unverified'} successfully.`);
+      toast({
+        variant: "success",
+        title: "Verification Updated",
+        description: `User has been ${!currentStatus ? 'verified' : 'unverified'} successfully.`
+      });
     } catch (error) {
       console.error("Error updating user status:", error);
-      alert("Failed to update user verification status. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update user verification status. Please try again."
+      });
     }
   };
 

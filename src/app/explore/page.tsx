@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DEFAULT_SKILL_CATEGORIES } from "@/types";
 import { useFirebaseStore } from "@/store/useFirebaseStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useToast } from "@/hooks/use-toast";
 import { projectInitializer } from "@/lib/initialization";
 import { Search, MapPin, Star, Clock, Filter, MessageSquare, Loader2, ArrowLeftRight } from "lucide-react";
 
@@ -19,6 +20,7 @@ export default function ExplorePage() {
   const [selectedLocation, setSelectedLocation] = useState("");
 
   const { session } = useAuthStore();
+  const { toast } = useToast();
   const {
     searchResults,
     isLoadingUsers,
@@ -93,10 +95,18 @@ export default function ExplorePage() {
         message: `Hi! I'd like to swap my ${userSkill.name} skills for your ${targetSkill.name} expertise.`
       });
       
-      alert("Swap request sent successfully!");
+      toast({
+        variant: "success",
+        title: "Swap Request Sent",
+        description: "Your swap request has been sent successfully!"
+      });
     } catch (error) {
       console.error("Error sending swap request:", error);
-      alert("Failed to send swap request. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to send swap request. Please try again."
+      });
     }
   };
 
@@ -116,7 +126,11 @@ export default function ExplorePage() {
       window.location.href = "/messages";
     } catch (error) {
       console.error("Error creating conversation:", error);
-      alert("Failed to start conversation. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to start conversation. Please try again."
+      });
     }
   };
 
@@ -384,7 +398,11 @@ export default function ExplorePage() {
                           } else if (!session) {
                             handleRequestSwap(user, null, null);
                           } else {
-                            alert("This user has no skills offered for swap");
+                            toast({
+                              variant: "default",
+                              title: "No Skills Available",
+                              description: "This user has no skills offered for swap"
+                            });
                           }
                         }}
                         disabled={!session || !user.skillsOffered?.length}

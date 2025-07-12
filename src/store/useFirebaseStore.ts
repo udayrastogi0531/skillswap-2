@@ -144,12 +144,12 @@ export const useFirebaseStore = create<FirebaseState>()(
         }
       },
 
-      // Admin-only: Load all users regardless of verification status
+      // Admin-only: Load all users regardless of verification status and including banned users
       loadAllUsers: async (searchQuery, category, location) => {
         try {
           set({ isLoadingUsers: true, error: null });
-          // Always use searchAllUsers for admin dashboard - no verification filtering
-          const users = await userService.searchAllUsers(searchQuery, category, location);
+          // Use searchAllUsersIncludingBanned for admin dashboard - shows ALL users including banned ones
+          const users = await userService.searchAllUsersIncludingBanned(searchQuery, category, location);
           set({ users, searchResults: users });
         } catch (error: any) {
           console.error("Error loading all users:", error);

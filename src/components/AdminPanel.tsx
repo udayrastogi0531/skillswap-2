@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { AdminGuard } from "@/components/RoleGuard";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useToast } from "@/hooks/use-toast";
 import { getAllUsers, setupFirstAdmin } from "@/utils/adminUtils";
 
 interface User {
@@ -20,6 +21,7 @@ interface User {
 export function AdminPanel() {
   const { promoteUserToAdmin, demoteUserFromAdmin } = useRoleAccess();
   const { session } = useAuthStore();
+  const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,11 @@ export function AdminPanel() {
       if (result.success) {
         // Reload users to reflect changes
         await loadUsers();
-        alert("User promoted to admin successfully!");
+        toast({
+          variant: "success",
+          title: "User Promoted",
+          description: "User promoted to admin successfully!"
+        });
       } else {
         setError(result.error || "Failed to promote user");
       }
@@ -77,7 +83,11 @@ export function AdminPanel() {
       if (result.success) {
         // Reload users to reflect changes
         await loadUsers();
-        alert("User demoted from admin successfully!");
+        toast({
+          variant: "success",
+          title: "User Demoted",
+          description: "User demoted from admin successfully!"
+        });
       } else {
         setError(result.error || "Failed to demote user");
       }
@@ -105,7 +115,11 @@ export function AdminPanel() {
       const result = await setupFirstAdmin(setupEmail, session.uid);
       
       if (result.success) {
-        alert(result.message || "First admin setup successful!");
+        toast({
+          variant: "success",
+          title: "Admin Setup Complete",
+          description: result.message || "First admin setup successful!"
+        });
         setSetupEmail("");
         await loadUsers();
       } else {

@@ -51,7 +51,7 @@ export function MainHeader() {
               <Search className="h-4 w-4" />
               Explore
             </Link>
-            <Link 
+            {/* <Link 
               href="/requests" 
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -71,7 +71,7 @@ export function MainHeader() {
             >
               <Users className="h-4 w-4" />
               Community
-            </Link>
+            </Link> */}
           </nav>
 
           {/* User actions */}

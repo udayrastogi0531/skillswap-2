@@ -132,9 +132,73 @@ export const userService = {
     return users.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   },
 
-  // Admin-only: Search all users (including unverified)
+  // Admin-only: Search all users (including unverified and banned)
   async searchAllUsers(searchQuery?: string, skillCategory?: string, location?: string) {
     return this.searchUsers(searchQuery, skillCategory, location, false);
+  },
+
+  // Admin-only: Search all users including banned users for user management
+  async searchAllUsersIncludingBanned(searchQuery?: string, skillCategory?: string, location?: string) {
+    // Get base users query
+    let usersQuery = query(collection(db, COLLECTIONS.USERS));
+    
+    const querySnapshot = await getDocs(usersQuery);
+    let users = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as User[];
+
+    // Apply search filters without excluding banned users
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      users = users.filter(user => 
+        user.displayName?.toLowerCase().includes(lowerQuery) ||
+        user.bio?.toLowerCase().includes(lowerQuery) ||
+        user.location?.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    if (location) {
+      users = users.filter(user => 
+        user.location?.toLowerCase().includes(location.toLowerCase())
+      );
+    }
+
+    // Load skills for each user
+    for (const user of users) {
+      const skillsQuery = query(
+        collection(db, COLLECTIONS.SKILLS),
+        where("userId", "==", user.id)
+      );
+      const skillsSnapshot = await getDocs(skillsQuery);
+      const skills = skillsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as (Skill & { type: 'offered' | 'wanted'; userId: string })[];
+      
+      user.skillsOffered = skills.filter(skill => skill.type === 'offered');
+      user.skillsWanted = skills.filter(skill => skill.type === 'wanted');
+
+      // Apply skill category filter if specified
+      if (skillCategory) {
+        const hasMatchingSkill = [...(user.skillsOffered || []), ...(user.skillsWanted || [])]
+          .some(skill => skill.category?.id === skillCategory);
+        if (!hasMatchingSkill) {
+          continue;
+        }
+      }
+    }
+
+    // Filter by skill category after loading skills
+    if (skillCategory) {
+      users = users.filter(user => {
+        const allSkills = [...(user.skillsOffered || []), ...(user.skillsWanted || [])];
+        return allSkills.some(skill => skill.category?.id === skillCategory);
+      });
+    }
+
+    // Sort by rating
+    return users.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   },
 
   // Admin Methods
@@ -548,13 +612,19 @@ export const ratingService = {
 export const messageService = {
   // Create conversation
   async createConversation(participants: string[], swapRequestId?: string) {
-    const conversationRef = await addDoc(collection(db, COLLECTIONS.CONVERSATIONS), {
+    const conversationData: any = {
       participants,
-      swapRequestId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastMessage: null
-    });
+    };
+
+    // Only add swapRequestId if it's defined to avoid Firestore undefined value error
+    if (swapRequestId) {
+      conversationData.swapRequestId = swapRequestId;
+    }
+
+    const conversationRef = await addDoc(collection(db, COLLECTIONS.CONVERSATIONS), conversationData);
 
     return conversationRef.id;
   },
