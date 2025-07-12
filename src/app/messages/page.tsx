@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useFirebaseStore } from '@/store/useFirebaseStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { userService } from '@/lib/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +44,7 @@ export default function MessagesPage() {
   const [replyTo, setReplyTo] = useState<string | undefined>();
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [userNames, setUserNames] = useState<{ [userId: string]: string }>({});
 
   useEffect(() => {
     if (currentUserProfile?.uid) {
@@ -55,6 +57,65 @@ export default function MessagesPage() {
       loadMessages(selectedConversation);
     }
   }, [selectedConversation, loadMessages]);
+
+  // Load user names for conversation participants
+  useEffect(() => {
+    const loadUserNames = async () => {
+      if (!conversations || conversations.length === 0) return;
+      
+      const allParticipants = new Set<string>();
+      conversations.forEach(conversation => {
+        conversation.participants.forEach(participantId => {
+          if (participantId !== currentUserProfile?.uid) {
+            allParticipants.add(participantId);
+          }
+        });
+      });
+
+      const names: { [userId: string]: string } = {};
+      
+      for (const userId of allParticipants) {
+        try {
+          const userProfile = await userService.getUserProfile(userId);
+          names[userId] = userProfile?.displayName || userProfile?.name || userProfile?.email || 'Unknown User';
+        } catch (error) {
+          console.error(`Failed to load user ${userId}:`, error);
+          names[userId] = 'Unknown User';
+        }
+      }
+      
+      setUserNames(names);
+    };
+
+    loadUserNames();
+  }, [conversations, currentUserProfile]);
+
+  // Function to get conversation display name
+  const getConversationName = (conversation: Conversation) => {
+    if (conversation.title) {
+      return conversation.title;
+    }
+    
+    // For direct conversations, show the other participant's name
+    if (conversation.type === 'direct' && conversation.participants.length === 2) {
+      const otherParticipant = conversation.participants.find(id => id !== currentUserProfile?.uid);
+      if (otherParticipant && userNames[otherParticipant]) {
+        return userNames[otherParticipant];
+      }
+    }
+    
+    // For group conversations or fallback
+    const otherParticipants = conversation.participants
+      .filter(id => id !== currentUserProfile?.uid)
+      .map(id => userNames[id] || 'Unknown')
+      .slice(0, 2); // Show first 2 names
+    
+    if (otherParticipants.length > 0) {
+      return otherParticipants.join(', ') + (conversation.participants.length > 3 ? '...' : '');
+    }
+    
+    return `Conversation ${conversation.id.slice(0, 8)}`;
+  };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !currentUserProfile) return;
@@ -142,6 +203,7 @@ export default function MessagesPage() {
 
   const conversationList = conversations || [];
   const conversationMessages = selectedConversation ? (messages[selectedConversation] || []) : [];
+  const selectedConversationData = conversationList.find(c => c.id === selectedConversation);
 
   return (
     <div className="container mx-auto py-8">
@@ -163,7 +225,7 @@ export default function MessagesPage() {
                   onClick={() => setSelectedConversation(conversation.id)}
                 >
                   <div className="font-medium text-sm">
-                    {conversation.title || `Conversation ${conversation.id.slice(0, 8)}`}
+                    {getConversationName(conversation)}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {conversation.participants.length} participants
@@ -189,7 +251,10 @@ export default function MessagesPage() {
         <Card className="col-span-2">
           <CardHeader>
             <CardTitle>
-              {selectedConversation ? 'Messages' : 'Select a conversation'}
+              {selectedConversation && selectedConversationData 
+                ? getConversationName(selectedConversationData)
+                : 'Select a conversation'
+              }
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -235,6 +300,13 @@ export default function MessagesPage() {
                           </div>
                         ) : (
                           <>
+                            {/* Sender name for messages from others */}
+                            {message.senderId !== currentUserProfile?.uid && (
+                              <div className="text-xs font-medium opacity-80 mb-1">
+                                {userNames[message.senderId] || 'Unknown User'}
+                              </div>
+                            )}
+                            
                             <div className="text-sm">{message.content}</div>
                             
                             {/* Message metadata */}
