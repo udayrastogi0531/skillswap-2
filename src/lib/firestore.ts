@@ -93,10 +93,28 @@ export const userService = {
     q = query(q, orderBy("rating", "desc"), limit(20));
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const users = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as User[];
+
+    // Load skills for each user
+    for (const user of users) {
+      const skillsQuery = query(
+        collection(db, COLLECTIONS.SKILLS),
+        where("userId", "==", user.id)
+      );
+      const skillsSnapshot = await getDocs(skillsQuery);
+      const skills = skillsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as (Skill & { type: 'offered' | 'wanted'; userId: string })[];
+      
+      user.skillsOffered = skills.filter(skill => skill.type === 'offered');
+      user.skillsWanted = skills.filter(skill => skill.type === 'wanted');
+    }
+
+    return users;
   },
 
   // Admin Methods

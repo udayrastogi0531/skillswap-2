@@ -113,7 +113,9 @@ export default function ExplorePage() {
     }
   };
 
-  const getLevelColor = (level: string) => {
+  const getLevelColor = (level: string | undefined) => {
+    if (!level) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+    
     switch (level.toLowerCase()) {
       case 'beginner': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
       case 'intermediate': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
@@ -295,7 +297,7 @@ export default function ExplorePage() {
                         <h4 className="font-medium text-sm mb-2 text-green-700">Skills Offered</h4>
                         <div className="flex flex-wrap gap-1">
                           {user.skillsOffered.slice(0, 3).map((skill, index) => (
-                            <Badge key={index} className={getLevelColor(skill.level)}>
+                            <Badge key={index} className={getLevelColor(skill.level || 'beginner')}>
                               {skill.name}
                             </Badge>
                           ))}

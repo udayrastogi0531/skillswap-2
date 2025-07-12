@@ -12,7 +12,7 @@ interface SkillsSectionProps {
   isLoading: boolean;
   onAddSkill: (type: 'offered' | 'wanted') => void;
   onRemoveSkill: (skillId: string, type: 'offered' | 'wanted') => void;
-  getLevelColor: (level: string) => string;
+  getLevelColor: (level: string | undefined) => string;
 }
 
 export function SkillsSection({
@@ -62,8 +62,8 @@ export function SkillsSection({
               }>
                 {skill.name}
               </Badge>
-              <Badge className={getLevelColor(skill.level)} variant="secondary">
-                {skill.level}
+              <Badge className={getLevelColor(skill.level || 'beginner')} variant="secondary">
+                {skill.level || 'beginner'}
               </Badge>
               <Button 
                 size="sm" 

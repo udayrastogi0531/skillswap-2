@@ -137,7 +137,9 @@ export default function ProfilePage() {
     setNewSkill({ name: "", category: "", level: "beginner" });
   };
 
-  const getLevelColor = (level: string) => {
+  const getLevelColor = (level: string | undefined) => {
+    if (!level) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+    
     switch (level.toLowerCase()) {
       case 'beginner': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
       case 'intermediate': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
