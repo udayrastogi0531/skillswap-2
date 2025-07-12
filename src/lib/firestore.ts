@@ -304,14 +304,12 @@ export const swapRequestService = {
     if (type === "incoming") {
       q = query(
         collection(db, COLLECTIONS.SWAP_REQUESTS),
-        where("responderId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("responderId", "==", userId)
       );
     } else if (type === "outgoing") {
       q = query(
         collection(db, COLLECTIONS.SWAP_REQUESTS),
-        where("requesterId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("requesterId", "==", userId)
       );
     } else {
       // Get both incoming and outgoing
@@ -319,13 +317,11 @@ export const swapRequestService = {
       const [incoming, outgoing] = await Promise.all([
         getDocs(query(
           collection(db, COLLECTIONS.SWAP_REQUESTS),
-          where("responderId", "==", userId),
-          orderBy("createdAt", "desc")
+          where("responderId", "==", userId)
         )),
         getDocs(query(
           collection(db, COLLECTIONS.SWAP_REQUESTS),
-          where("requesterId", "==", userId),
-          orderBy("createdAt", "desc")
+          where("requesterId", "==", userId)
         ))
       ]);
 
@@ -343,26 +339,65 @@ export const swapRequestService = {
         updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
       }));
 
-      return [...incomingRequests, ...outgoingRequests].sort((a, b) => 
+      const allRequests = [...incomingRequests, ...outgoingRequests] as SwapRequest[];
+      
+      // Populate skill details for each swap request
+      for (const request of allRequests) {
+        // If offeredSkill is just an ID string, fetch the full skill object
+        if (typeof request.offeredSkill === 'string') {
+          const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.offeredSkill));
+          if (skillDoc.exists()) {
+            request.offeredSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+          }
+        }
+        
+        // If requestedSkill is just an ID string, fetch the full skill object
+        if (typeof request.requestedSkill === 'string') {
+          const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.requestedSkill));
+          if (skillDoc.exists()) {
+            request.requestedSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+          }
+        }
+      }
+
+      return allRequests.sort((a, b) => 
         b.createdAt - a.createdAt
-      ) as SwapRequest[];
+      );
     }
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const swapRequests = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toMillis() || Date.now(),
       updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
     })) as SwapRequest[];
+
+    // Populate skill details for each swap request
+    for (const request of swapRequests) {
+      // If offeredSkill is just an ID string, fetch the full skill object
+      if (typeof request.offeredSkill === 'string') {
+        const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.offeredSkill));
+        if (skillDoc.exists()) {
+          request.offeredSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+        }
+      }
+      
+      // If requestedSkill is just an ID string, fetch the full skill object
+      if (typeof request.requestedSkill === 'string') {
+        const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.requestedSkill));
+        if (skillDoc.exists()) {
+          request.requestedSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+        }
+      }
+    }
+
+    return swapRequests.sort((a, b) => b.createdAt - a.createdAt);
   },
 
   // Get all swap requests (admin)
   async getAllSwapRequests(status?: SwapRequest["status"], priority?: string) {
-    let q = query(
-      collection(db, COLLECTIONS.SWAP_REQUESTS),
-      orderBy("createdAt", "desc")
-    );
+    let q = query(collection(db, COLLECTIONS.SWAP_REQUESTS));
 
     if (status) {
       q = query(q, where("status", "==", status));
@@ -373,10 +408,33 @@ export const swapRequestService = {
     }
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const swapRequests = querySnapshot.docs.map(doc => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toMillis() || Date.now(),
+      updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
     })) as SwapRequest[];
+
+    // Populate skill details for each swap request
+    for (const request of swapRequests) {
+      // If offeredSkill is just an ID string, fetch the full skill object
+      if (typeof request.offeredSkill === 'string') {
+        const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.offeredSkill));
+        if (skillDoc.exists()) {
+          request.offeredSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+        }
+      }
+      
+      // If requestedSkill is just an ID string, fetch the full skill object
+      if (typeof request.requestedSkill === 'string') {
+        const skillDoc = await getDoc(doc(db, COLLECTIONS.SKILLS, request.requestedSkill));
+        if (skillDoc.exists()) {
+          request.requestedSkill = { id: skillDoc.id, ...skillDoc.data() } as Skill;
+        }
+      }
+    }
+
+    return swapRequests.sort((a, b) => b.createdAt - a.createdAt);
   },
 
   // Subscribe to swap request updates
@@ -390,14 +448,12 @@ export const swapRequestService = {
     if (type === "incoming") {
       q = query(
         collection(db, COLLECTIONS.SWAP_REQUESTS),
-        where("responderId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("responderId", "==", userId)
       );
     } else {
       q = query(
         collection(db, COLLECTIONS.SWAP_REQUESTS),
-        where("requesterId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("requesterId", "==", userId)
       );
     }
 
@@ -409,7 +465,10 @@ export const swapRequestService = {
         updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
       })) as SwapRequest[];
       
-      callback(requests);
+      // Sort by createdAt in memory since we removed orderBy from query
+      const sortedRequests = requests.sort((a, b) => b.createdAt - a.createdAt);
+      
+      callback(sortedRequests);
     });
   }
 };
