@@ -48,6 +48,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (currentUserProfile?.uid) {
+      console.log('Loading conversations for user:', currentUserProfile.uid);
       loadConversations(currentUserProfile.uid);
     }
   }, [currentUserProfile, loadConversations]);
@@ -76,14 +77,29 @@ export default function MessagesPage() {
       
       for (const userId of allParticipants) {
         try {
+          console.log('Loading user profile for:', userId);
           const userProfile = await userService.getUserProfile(userId);
-          names[userId] = userProfile?.displayName || userProfile?.name || userProfile?.email || 'Unknown User';
+          console.log('User profile loaded:', userProfile);
+          
+          if (userProfile) {
+            // Try different name fields in order of preference
+            const displayName = userProfile.displayName || 
+                              userProfile.name || 
+                              userProfile.email?.split('@')[0] ||
+                              `User ${userId.slice(0, 6)}`;
+            names[userId] = displayName;
+            console.log(`Set name for ${userId}: ${displayName}`);
+          } else {
+            console.log(`No profile found for user: ${userId}`);
+            names[userId] = `User ${userId.slice(0, 6)}`;
+          }
         } catch (error) {
           console.error(`Failed to load user ${userId}:`, error);
-          names[userId] = 'Unknown User';
+          names[userId] = `User ${userId.slice(0, 6)}`;
         }
       }
       
+      console.log('Final user names object:', names);
       setUserNames(names);
     };
 
@@ -92,22 +108,30 @@ export default function MessagesPage() {
 
   // Function to get conversation display name
   const getConversationName = (conversation: Conversation) => {
+    console.log('Getting name for conversation:', conversation);
+    console.log('Current userNames:', userNames);
+    
     if (conversation.title) {
       return conversation.title;
     }
     
-    // For direct conversations, show the other participant's name
-    if (conversation.type === 'direct' && conversation.participants.length === 2) {
+    // For conversations with 2 participants (direct chat), show the other participant's name
+    if (conversation.participants.length === 2) {
       const otherParticipant = conversation.participants.find(id => id !== currentUserProfile?.uid);
+      console.log('Other participant:', otherParticipant);
       if (otherParticipant && userNames[otherParticipant]) {
+        console.log('Found name for other participant:', userNames[otherParticipant]);
         return userNames[otherParticipant];
+      }
+      if (otherParticipant) {
+        return `User ${otherParticipant.slice(0, 6)}`;
       }
     }
     
     // For group conversations or fallback
     const otherParticipants = conversation.participants
       .filter(id => id !== currentUserProfile?.uid)
-      .map(id => userNames[id] || 'Unknown')
+      .map(id => userNames[id] || `User ${id.slice(0, 6)}`)
       .slice(0, 2); // Show first 2 names
     
     if (otherParticipants.length > 0) {
@@ -204,6 +228,12 @@ export default function MessagesPage() {
   const conversationList = conversations || [];
   const conversationMessages = selectedConversation ? (messages[selectedConversation] || []) : [];
   const selectedConversationData = conversationList.find(c => c.id === selectedConversation);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Conversations updated:', conversationList);
+    console.log('User names:', userNames);
+  }, [conversationList, userNames]);
 
   return (
     <div className="container mx-auto py-8">
@@ -303,7 +333,7 @@ export default function MessagesPage() {
                             {/* Sender name for messages from others */}
                             {message.senderId !== currentUserProfile?.uid && (
                               <div className="text-xs font-medium opacity-80 mb-1">
-                                {userNames[message.senderId] || 'Unknown User'}
+                                {userNames[message.senderId] || `User ${message.senderId.slice(0, 6)}`}
                               </div>
                             )}
                             
