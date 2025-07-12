@@ -108,9 +108,9 @@ export default function AdminDashboard() {
   // Debug logging
   useEffect(() => {
     console.log('Admin dashboard state:', {
-      users: users.length,
-      adminRequests: adminRequests.length,
-      flaggedContent: flaggedContent.length,
+      users: users?.length || 0,
+      adminRequests: adminRequests?.length || 0,
+      flaggedContent: flaggedContent?.length || 0,
       userRole,
       isLoadingUsers,
       isLoadingRequests
@@ -221,7 +221,7 @@ export default function AdminDashboard() {
 
     switch (reportType) {
       case 'users':
-        data = users.map(u => ({
+        data = (users || []).map(u => ({
           name: u.name,
           email: u.email,
           verified: u.isVerified,
@@ -232,7 +232,7 @@ export default function AdminDashboard() {
         filename = "users_report.csv";
         break;
       case 'swaps':
-        data = adminRequests.map(r => ({
+        data = (adminRequests || []).map(r => ({
           status: r.status,
           offeredSkill: r.offeredSkill.name,
           requestedSkill: r.requestedSkill.name,
@@ -243,11 +243,11 @@ export default function AdminDashboard() {
         break;
       case 'activity':
         data = [
-          { metric: "Total Users", value: users.length },
-          { metric: "Verified Users", value: users.filter(u => u.isVerified).length },
-          { metric: "Total Requests", value: adminRequests.length },
-          { metric: "Pending Requests", value: adminRequests.filter(r => r.status === 'pending').length },
-          { metric: "Accepted Requests", value: adminRequests.filter(r => r.status === 'accepted').length }
+          { metric: "Total Users", value: (users || []).length },
+          { metric: "Verified Users", value: (users || []).filter(u => u.isVerified).length },
+          { metric: "Total Requests", value: (adminRequests || []).length },
+          { metric: "Pending Requests", value: (adminRequests || []).filter(r => r.status === 'pending').length },
+          { metric: "Accepted Requests", value: (adminRequests || []).filter(r => r.status === 'accepted').length }
         ];
         filename = "activity_report.csv";
         break;
@@ -284,10 +284,10 @@ export default function AdminDashboard() {
   };
 
   // Filter functions
-  const filteredRequests = adminRequests.filter((request) => {
+  const filteredRequests = (adminRequests || []).filter((request) => {
     const matchesSearch = searchQuery === "" || 
-      request.offeredSkill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.requestedSkill.name.toLowerCase().includes(searchQuery.toLowerCase());
+      request.offeredSkill?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.requestedSkill?.name?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = statusFilter === "all" || request.status === statusFilter;
     const matchesPriority = priorityFilter === "all" || request.priority === priorityFilter;
@@ -295,10 +295,10 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const filteredUsers = users.filter((u) => 
+  const filteredUsers = (users || []).filter((u) => 
     searchQuery === "" || 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleUserStatusToggle = async (userId: string, currentStatus: boolean) => {
@@ -358,10 +358,10 @@ export default function AdminDashboard() {
   }
 
   const stats = {
-    totalRequests: adminRequests.length,
-    pendingRequests: adminRequests.filter(r => r.status === 'pending').length,
-    totalUsers: users.length,
-    verifiedUsers: users.filter(u => u.isVerified).length
+    totalRequests: (adminRequests || []).length,
+    pendingRequests: (adminRequests || []).filter(r => r.status === 'pending').length,
+    totalUsers: (users || []).length,
+    verifiedUsers: (users || []).filter(u => u.isVerified).length
   };
 
   return (
@@ -450,7 +450,7 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Flagged Content</p>
-                <p className="text-2xl font-bold text-red-600">{flaggedContent.filter(item => !item.reviewed).length}</p>
+                <p className="text-2xl font-bold text-red-600">{(flaggedContent || []).filter(item => !item.reviewed).length}</p>
               </div>
               <Flag className="h-8 w-8 text-red-500" />
             </div>
@@ -810,11 +810,11 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Content Moderation</h2>
             <Badge variant="destructive" className="px-3 py-1">
-              {flaggedContent.filter(item => !item.reviewed).length} Pending Review
+              {(flaggedContent || []).filter(item => !item.reviewed).length} Pending Review
             </Badge>
           </div>
 
-          {flaggedContent.length === 0 ? (
+          {(flaggedContent || []).length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
                 <Flag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1024,19 +1024,19 @@ export default function AdminDashboard() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-600">{users.length}</p>
+                  <p className="text-2xl font-bold text-blue-600">{(users || []).length}</p>
                   <p className="text-sm text-muted-foreground">Total Users</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{users.filter(u => u.isVerified).length}</p>
+                  <p className="text-2xl font-bold text-green-600">{(users || []).filter(u => u.isVerified).length}</p>
                   <p className="text-sm text-muted-foreground">Verified Users</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-600">{adminRequests.length}</p>
+                  <p className="text-2xl font-bold text-orange-600">{(adminRequests || []).length}</p>
                   <p className="text-sm text-muted-foreground">Total Requests</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-purple-600">{adminRequests.filter(r => r.status === 'accepted').length}</p>
+                  <p className="text-2xl font-bold text-purple-600">{(adminRequests || []).filter(r => r.status === 'accepted').length}</p>
                   <p className="text-sm text-muted-foreground">Accepted Swaps</p>
                 </div>
               </div>

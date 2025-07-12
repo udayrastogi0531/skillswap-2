@@ -26,13 +26,20 @@ export default function ExplorePage() {
     searchUsers,
     clearError,
     createSwapRequest,
-    createConversation
+    createConversation,
+    currentUserProfile,
+    loadCurrentUserProfile
   } = useFirebaseStore();
 
   // Load initial users on component mount and initialize project
   useEffect(() => {
     const initializeAndLoadUsers = async () => {
       try {
+        // Load current user profile if logged in
+        if (session?.uid) {
+          await loadCurrentUserProfile(session.uid);
+        }
+        
         // Initialize project with demo data if needed
         await projectInitializer.initializeProject();
         
@@ -46,7 +53,7 @@ export default function ExplorePage() {
     };
 
     initializeAndLoadUsers();
-  }, []);
+  }, [session?.uid]);
 
   // Search function
   const handleSearch = () => {
@@ -267,7 +274,18 @@ export default function ExplorePage() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{user.displayName}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-lg">{user.displayName}</h3>
+                          {user.isVerified ? (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                              ✓ Verified
+                            </Badge>
+                          ) : currentUserProfile?.role === 'admin' ? (
+                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 text-xs">
+                              ⚠ Unverified
+                            </Badge>
+                          ) : null}
+                        </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <MapPin className="h-3 w-3" />
                           <span>{user.location || "Location not set"}</span>

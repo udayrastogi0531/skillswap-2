@@ -79,9 +79,10 @@ export const userService = {
   },
 
   // Search users by skills or location
-  async searchUsers(searchQuery?: string, skillCategory?: string, location?: string) {
-    let q = query(collection(db, COLLECTIONS.USERS));
+  async searchUsers(searchQuery?: string, skillCategory?: string, location?: string, verifiedOnly: boolean = true) {
+    let q = query(collection(db, COLLECTIONS.USERS), limit(20));
 
+    // Apply filters one at a time to avoid complex queries
     if (skillCategory) {
       q = query(q, where("skillsOffered.category", "array-contains", skillCategory));
     }
@@ -90,13 +91,26 @@ export const userService = {
       q = query(q, where("location", ">=", location), where("location", "<=", location + "\uf8ff"));
     }
 
-    q = query(q, orderBy("rating", "desc"), limit(20));
-
     const querySnapshot = await getDocs(q);
-    const users = querySnapshot.docs.map(doc => ({
+    let users = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as User[];
+
+    // Filter in memory to avoid complex Firestore queries
+    users = users.filter(user => {
+      // Filter out banned users
+      if (user.isBanned === true) {
+        return false;
+      }
+      
+      // Filter for verified users only if required
+      if (verifiedOnly && user.isVerified !== true) {
+        return false;
+      }
+      
+      return true;
+    });
 
     // Load skills for each user
     for (const user of users) {
@@ -114,7 +128,13 @@ export const userService = {
       user.skillsWanted = skills.filter(skill => skill.type === 'wanted');
     }
 
-    return users;
+    // Sort by rating since we can't use orderBy with multiple where clauses
+    return users.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  },
+
+  // Admin-only: Search all users (including unverified)
+  async searchAllUsers(searchQuery?: string, skillCategory?: string, location?: string) {
+    return this.searchUsers(searchQuery, skillCategory, location, false);
   },
 
   // Admin Methods
@@ -186,7 +206,6 @@ export const userService = {
     const systemMessagesQuery = query(
       collection(db, "systemMessages"),
       where("isActive", "==", true),
-      orderBy("createdAt", "desc"),
       limit(10)
     );
 
@@ -202,7 +221,14 @@ export const userService = {
       const systemMessages = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      }))
+      // Sort by createdAt in memory to avoid composite index requirement
+      .sort((a: any, b: any) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : a.createdAt || 0;
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : b.createdAt || 0;
+        return bTime - aTime; // Descending order
+      });
+      
       callback({ type: 'systemMessages', data: systemMessages });
     });
 

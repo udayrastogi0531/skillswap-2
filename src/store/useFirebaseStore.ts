@@ -132,7 +132,20 @@ export const useFirebaseStore = create<FirebaseState>()(
       loadUsers: async (searchQuery, category, location) => {
         try {
           set({ isLoadingUsers: true, error: null });
-          const users = await userService.searchUsers(searchQuery, category, location);
+          
+          // Check if current user is admin
+          const currentUser = get().currentUserProfile;
+          const isAdmin = currentUser?.role === 'admin';
+          
+          let users;
+          if (isAdmin) {
+            // Admin can see all users (including unverified)
+            users = await userService.searchAllUsers(searchQuery, category, location);
+          } else {
+            // Regular users only see verified users
+            users = await userService.searchUsers(searchQuery, category, location);
+          }
+          
           set({ users, searchResults: users });
         } catch (error: any) {
           console.error("Error loading users:", error);
@@ -178,7 +191,20 @@ export const useFirebaseStore = create<FirebaseState>()(
       searchUsers: async (query, category, location) => {
         try {
           set({ isLoadingUsers: true, error: null });
-          const users = await userService.searchUsers(query, category, location);
+          
+          // Check if current user is admin
+          const currentUser = get().currentUserProfile;
+          const isAdmin = currentUser?.role === 'admin';
+          
+          let users;
+          if (isAdmin) {
+            // Admin can see all users (including unverified)
+            users = await userService.searchAllUsers(query, category, location);
+          } else {
+            // Regular users only see verified users
+            users = await userService.searchUsers(query, category, location);
+          }
+          
           set({ searchResults: users });
         } catch (error: any) {
           console.error("Error searching users:", error);
