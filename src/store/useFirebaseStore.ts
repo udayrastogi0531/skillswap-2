@@ -51,6 +51,7 @@ interface FirebaseState {
   // Actions
   // User actions
   loadUsers: (searchQuery?: string, category?: string, location?: string) => Promise<void>;
+  loadAllUsers: (searchQuery?: string, category?: string, location?: string) => Promise<void>; // Admin-only: loads all users
   loadCurrentUserProfile: (userId: string) => Promise<void>;
   updateUserProfile: (userId: string, updates: Partial<User>) => Promise<void>;
   searchUsers: (query?: string, category?: string, location?: string) => Promise<void>;
@@ -132,23 +133,26 @@ export const useFirebaseStore = create<FirebaseState>()(
       loadUsers: async (searchQuery, category, location) => {
         try {
           set({ isLoadingUsers: true, error: null });
-          
-          // Check if current user is admin
-          const currentUser = get().currentUserProfile;
-          const isAdmin = currentUser?.role === 'admin';
-          
-          let users;
-          if (isAdmin) {
-            // Admin can see all users (including unverified)
-            users = await userService.searchAllUsers(searchQuery, category, location);
-          } else {
-            // Regular users only see verified users
-            users = await userService.searchUsers(searchQuery, category, location);
-          }
-          
+          // Always show only verified users for public contexts (explore page)
+          const users = await userService.searchUsers(searchQuery, category, location);
           set({ users, searchResults: users });
         } catch (error: any) {
           console.error("Error loading users:", error);
+          set({ error: error.message || "Failed to load users" });
+        } finally {
+          set({ isLoadingUsers: false });
+        }
+      },
+
+      // Admin-only: Load all users regardless of verification status
+      loadAllUsers: async (searchQuery, category, location) => {
+        try {
+          set({ isLoadingUsers: true, error: null });
+          // Always use searchAllUsers for admin dashboard - no verification filtering
+          const users = await userService.searchAllUsers(searchQuery, category, location);
+          set({ users, searchResults: users });
+        } catch (error: any) {
+          console.error("Error loading all users:", error);
           set({ error: error.message || "Failed to load users" });
         } finally {
           set({ isLoadingUsers: false });
@@ -191,20 +195,8 @@ export const useFirebaseStore = create<FirebaseState>()(
       searchUsers: async (query, category, location) => {
         try {
           set({ isLoadingUsers: true, error: null });
-          
-          // Check if current user is admin
-          const currentUser = get().currentUserProfile;
-          const isAdmin = currentUser?.role === 'admin';
-          
-          let users;
-          if (isAdmin) {
-            // Admin can see all users (including unverified)
-            users = await userService.searchAllUsers(query, category, location);
-          } else {
-            // Regular users only see verified users
-            users = await userService.searchUsers(query, category, location);
-          }
-          
+          // Always show only verified users for public search (explore page)
+          const users = await userService.searchUsers(query, category, location);
           set({ searchResults: users });
         } catch (error: any) {
           console.error("Error searching users:", error);

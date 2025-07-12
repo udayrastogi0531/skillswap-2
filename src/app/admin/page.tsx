@@ -65,7 +65,7 @@ export default function AdminDashboard() {
     isLoadingUsers,
     isLoadingAdminData,
     loadAdminRequests,
-    loadUsers,
+    loadAllUsers,
     loadFlaggedContent,
     updateUserProfile,
     handleFlaggedContent,
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
     if (userRole === 'admin') {
       console.log('Admin dashboard loading data...');
       loadAdminRequests();
-      loadUsers();
+      loadAllUsers();
       loadFlaggedContent();
       
       // Set up real-time subscriptions
@@ -103,7 +103,7 @@ export default function AdminDashboard() {
       // Cleanup subscription on unmount
       return unsubscribe;
     }
-  }, [userRole, loadAdminRequests, loadUsers, loadFlaggedContent, subscribeToAdminData]);
+  }, [userRole, loadAdminRequests, loadAllUsers, loadFlaggedContent, subscribeToAdminData]);
 
   // Debug logging
   useEffect(() => {
@@ -184,7 +184,7 @@ export default function AdminDashboard() {
       setBanReason("");
       setSelectedUser(null);
       // Reload users to reflect the change
-      await loadUsers();
+      await loadAllUsers();
       alert("User has been banned successfully.");
     } catch (error) {
       console.error("Error banning user:", error);
@@ -198,7 +198,7 @@ export default function AdminDashboard() {
     try {
       await unbanUser(userId);
       console.log('User unbanned successfully');
-      await loadUsers();
+      await loadAllUsers();
       alert("User has been unbanned successfully.");
     } catch (error) {
       console.error("Error unbanning user:", error);
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
     try {
       await updateUserProfile(userId, { isVerified: !currentStatus });
       console.log('User verification status updated successfully');
-      await loadUsers();
+      await loadAllUsers();
       alert(`User has been ${!currentStatus ? 'verified' : 'unverified'} successfully.`);
     } catch (error) {
       console.error("Error updating user status:", error);
