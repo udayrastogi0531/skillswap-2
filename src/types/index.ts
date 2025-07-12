@@ -66,13 +66,59 @@ export interface Rating {
   createdAt: number;
 }
 
+// Notification Types
+export interface Notification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data?: any; // Additional data like swapRequestId, conversationId, etc.
+  read: boolean;
+  createdAt: number;
+  actionUrl?: string; // URL to navigate when notification is clicked
+}
+
+export type NotificationType = 
+  | 'swap_request_received'
+  | 'swap_request_accepted' 
+  | 'swap_request_declined'
+  | 'swap_request_completed'
+  | 'new_message'
+  | 'system_announcement'
+  | 'account_verification'
+  | 'skill_rating_received'
+  | 'admin_action';
+
+// Enhanced Message Types
 export interface Message {
   id: string;
   conversationId: string;
   senderId: string;
   content: string;
+  type: MessageType;
   timestamp: number;
   read: boolean;
+  edited?: boolean;
+  editedAt?: number;
+  attachments?: MessageAttachment[];
+  replyTo?: string; // Message ID this is replying to
+  reactions?: MessageReaction[];
+}
+
+export type MessageType = 'text' | 'image' | 'file' | 'system' | 'swap_request' | 'swap_update';
+
+export interface MessageAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image' | 'file';
+  size: number;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  users: string[]; // User IDs who reacted
 }
 
 export interface Conversation {
@@ -81,7 +127,13 @@ export interface Conversation {
   lastMessage?: Message;
   updatedAt: number;
   createdAt: number;
+  swapRequestId?: string; // If conversation is related to a swap request
+  title?: string; // Optional conversation title
+  type: ConversationType;
+  unreadCount?: { [userId: string]: number }; // Unread count per user
 }
+
+export type ConversationType = 'direct' | 'swap_related' | 'group';
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 export type SwapStatus = 'pending' | 'approved' | 'rejected' | 'accepted' | 'declined' | 'completed' | 'cancelled';

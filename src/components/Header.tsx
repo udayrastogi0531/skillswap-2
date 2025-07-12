@@ -8,6 +8,7 @@ import {
   IconPlus,
   IconUser,
   IconDashboard,
+  IconBell,
 } from "@tabler/icons-react";
 import { useAuthStore } from "@/store/useAuthStore";  // corrected path
 import slugify from "@/utils/slugify";
@@ -36,6 +37,11 @@ export default function Header() {
         name: "Dashboard",
         link: "/dashboard",
         icon: <IconDashboard className="h-4 w-4 text-muted-foreground" />,
+      },
+      {
+        name: "Notifications",
+        link: "/notifications",
+        icon: <IconBell className="h-4 w-4 text-muted-foreground" />,
       },
       {
         name: "Profile",

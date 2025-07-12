@@ -22,7 +22,7 @@ import {
   Unsubscribe
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { User, Skill, SwapRequest, Rating, Message, Conversation } from "@/types";
+import type { User, Skill, SwapRequest, Rating, Message, Conversation, Notification, NotificationType, MessageType, MessageAttachment, MessageReaction, ConversationType } from "@/types";
 
 // Collection references
 const COLLECTIONS = {
@@ -720,5 +720,358 @@ export const messageService = {
     );
 
     await Promise.all(batch);
+  }
+};
+
+// Notification System
+export const notificationService = {
+  // Create notification
+  async createNotification(notificationData: Omit<Notification, "id" | "createdAt">) {
+    const notificationRef = await addDoc(collection(db, "notifications"), {
+      ...notificationData,
+      createdAt: serverTimestamp()
+    });
+    return notificationRef.id;
+  },
+
+  // Get user notifications
+  async getUserNotifications(userId: string, notificationLimit: number = 20) {
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc"),
+      limit(notificationLimit)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toMillis() || Date.now()
+    })) as Notification[];
+  },
+
+  // Mark notification as read
+  async markNotificationAsRead(notificationId: string) {
+    const notificationRef = doc(db, "notifications", notificationId);
+    await updateDoc(notificationRef, {
+      read: true
+    });
+  },
+
+  // Mark all notifications as read for user
+  async markAllNotificationsAsRead(userId: string) {
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      where("read", "==", false)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const batch: Promise<void>[] = [];
+    querySnapshot.docs.forEach(doc => {
+      batch.push(updateDoc(doc.ref, { read: true }));
+    });
+    
+    await Promise.all(batch);
+  },
+
+  // Subscribe to user notifications
+  subscribeToUserNotifications(
+    userId: string,
+    callback: (notifications: Notification[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+      const notifications = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toMillis() || Date.now()
+      })) as Notification[];
+      callback(notifications);
+    });
+  },
+
+  // Get unread notification count
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      where("read", "==", false)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.size;
+  },
+
+  // Delete notification
+  async deleteNotification(notificationId: string) {
+    const notificationRef = doc(db, "notifications", notificationId);
+    await deleteDoc(notificationRef);
+  }
+};
+
+// Enhanced Messaging System
+export const enhancedMessageService = {
+  // Create conversation with enhanced features
+  async createConversation(participants: string[], type: ConversationType = 'direct', title?: string, swapRequestId?: string) {
+    const conversationData: any = {
+      participants,
+      type,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastMessage: null
+    };
+
+    if (title) conversationData.title = title;
+    if (swapRequestId) conversationData.swapRequestId = swapRequestId;
+
+    // Initialize unread counts
+    const unreadCount: { [key: string]: number } = {};
+    participants.forEach(userId => {
+      unreadCount[userId] = 0;
+    });
+    conversationData.unreadCount = unreadCount;
+
+    const conversationRef = await addDoc(collection(db, COLLECTIONS.CONVERSATIONS), conversationData);
+    return conversationRef.id;
+  },
+
+  // Send enhanced message
+  async sendMessage(
+    conversationId: string, 
+    senderId: string, 
+    content: string, 
+    type: MessageType = "text",
+    attachments?: MessageAttachment[],
+    replyTo?: string
+  ) {
+    const messageData: any = {
+      conversationId,
+      senderId,
+      content,
+      type,
+      timestamp: serverTimestamp(),
+      read: false
+    };
+
+    if (attachments) messageData.attachments = attachments;
+    if (replyTo) messageData.replyTo = replyTo;
+
+    const messageRef = await addDoc(collection(db, COLLECTIONS.MESSAGES), messageData);
+
+    // Update conversation's last message and unread counts
+    const conversationRef = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+    
+    if (conversationSnap.exists()) {
+      const conversationData = conversationSnap.data();
+      const participants = conversationData.participants || [];
+      const currentUnreadCount = conversationData.unreadCount || {};
+
+      // Increment unread count for all participants except sender
+      const newUnreadCount = { ...currentUnreadCount };
+      participants.forEach((userId: string) => {
+        if (userId !== senderId) {
+          newUnreadCount[userId] = (newUnreadCount[userId] || 0) + 1;
+        }
+      });
+
+      await updateDoc(conversationRef, {
+        lastMessage: {
+          content,
+          senderId,
+          timestamp: serverTimestamp(),
+          type
+        },
+        updatedAt: serverTimestamp(),
+        unreadCount: newUnreadCount
+      });
+
+      // Create notifications for other participants
+      const otherParticipants = participants.filter((id: string) => id !== senderId);
+      for (const participantId of otherParticipants) {
+        await notificationService.createNotification({
+          userId: participantId,
+          type: 'new_message',
+          title: 'New Message',
+          message: `You have a new message: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+          data: { conversationId, messageId: messageRef.id },
+          read: false,
+          actionUrl: `/messages?conversation=${conversationId}`
+        });
+      }
+    }
+
+    return messageRef.id;
+  },
+
+  // Mark messages as read in conversation
+  async markConversationAsRead(conversationId: string, userId: string) {
+    // Mark all unread messages in conversation as read
+    const q = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where("conversationId", "==", conversationId),
+      where("senderId", "!=", userId),
+      where("read", "==", false)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const batch: Promise<void>[] = [];
+    
+    querySnapshot.docs.forEach(doc => {
+      batch.push(updateDoc(doc.ref, { read: true }));
+    });
+    
+    await Promise.all(batch);
+
+    // Reset unread count for this user in conversation
+    const conversationRef = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+    
+    if (conversationSnap.exists()) {
+      const conversationData = conversationSnap.data();
+      const currentUnreadCount = conversationData.unreadCount || {};
+      const newUnreadCount = { ...currentUnreadCount };
+      newUnreadCount[userId] = 0;
+
+      await updateDoc(conversationRef, {
+        unreadCount: newUnreadCount
+      });
+    }
+  },
+
+  // Add reaction to message
+  async addMessageReaction(messageId: string, emoji: string, userId: string) {
+    const messageRef = doc(db, COLLECTIONS.MESSAGES, messageId);
+    const messageSnap = await getDoc(messageRef);
+    
+    if (messageSnap.exists()) {
+      const messageData = messageSnap.data();
+      const reactions = messageData.reactions || [];
+      
+      // Find existing reaction with this emoji
+      const existingReactionIndex = reactions.findIndex((r: MessageReaction) => r.emoji === emoji);
+      
+      if (existingReactionIndex >= 0) {
+        // Add user to existing reaction
+        const existingReaction = reactions[existingReactionIndex];
+        if (!existingReaction.users.includes(userId)) {
+          existingReaction.users.push(userId);
+        }
+      } else {
+        // Create new reaction
+        reactions.push({
+          emoji,
+          users: [userId]
+        });
+      }
+
+      await updateDoc(messageRef, { reactions });
+    }
+  },
+
+  // Remove reaction from message
+  async removeMessageReaction(messageId: string, emoji: string, userId: string) {
+    const messageRef = doc(db, COLLECTIONS.MESSAGES, messageId);
+    const messageSnap = await getDoc(messageRef);
+    
+    if (messageSnap.exists()) {
+      const messageData = messageSnap.data();
+      const reactions = messageData.reactions || [];
+      
+      const updatedReactions = reactions
+        .map((r: MessageReaction) => {
+          if (r.emoji === emoji) {
+            return {
+              ...r,
+              users: r.users.filter((id: string) => id !== userId)
+            };
+          }
+          return r;
+        })
+        .filter((r: MessageReaction) => r.users.length > 0);
+
+      await updateDoc(messageRef, { reactions: updatedReactions });
+    }
+  },
+
+  // Edit message
+  async editMessage(messageId: string, newContent: string) {
+    const messageRef = doc(db, COLLECTIONS.MESSAGES, messageId);
+    await updateDoc(messageRef, {
+      content: newContent,
+      edited: true,
+      editedAt: serverTimestamp()
+    });
+  },
+
+  // Delete message
+  async deleteMessage(messageId: string) {
+    const messageRef = doc(db, COLLECTIONS.MESSAGES, messageId);
+    await deleteDoc(messageRef);
+  },
+
+  // Get enhanced conversations for user
+  async getUserConversations(userId: string) {
+    const q = query(
+      collection(db, COLLECTIONS.CONVERSATIONS),
+      where("participants", "array-contains", userId),
+      orderBy("updatedAt", "desc")
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toMillis() || Date.now(),
+      updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
+    })) as Conversation[];
+  },
+
+  // Subscribe to enhanced conversations
+  subscribeToUserConversations(
+    userId: string,
+    callback: (conversations: Conversation[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, COLLECTIONS.CONVERSATIONS),
+      where("participants", "array-contains", userId),
+      orderBy("updatedAt", "desc")
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+      const conversations = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toMillis() || Date.now(),
+        updatedAt: doc.data().updatedAt?.toMillis() || Date.now()
+      })) as Conversation[];
+      callback(conversations);
+    });
+  },
+
+  // Subscribe to enhanced messages
+  subscribeToMessages(
+    conversationId: string,
+    callback: (messages: Message[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where("conversationId", "==", conversationId),
+      orderBy("timestamp", "asc")
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toMillis() || Date.now()
+      })) as Message[];
+      callback(messages);
+    });
   }
 };

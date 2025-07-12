@@ -4,13 +4,15 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import type { User, Skill, SwapRequest, Rating, Message, Conversation } from "@/types";
+import type { User, Skill, SwapRequest, Rating, Message, Conversation, Notification, MessageType, MessageAttachment, MessageReaction } from "@/types";
 import { 
   userService, 
   skillService, 
   swapRequestService, 
   ratingService, 
-  messageService 
+  messageService,
+  notificationService,
+  enhancedMessageService
 } from "@/lib/firestore";
 
 interface FirebaseState {
@@ -33,6 +35,11 @@ interface FirebaseState {
   messages: { [conversationId: string]: Message[] };
   activeConversation: string | null;
   isLoadingMessages: boolean;
+
+  // Notifications
+  notifications: Notification[];
+  unreadNotificationCount: number;
+  isLoadingNotifications: boolean;
 
   // Search & Filters
   searchQuery: string;
@@ -97,6 +104,22 @@ interface FirebaseState {
   sendBroadcastMessage: (message: string, type: 'info' | 'warning' | 'success') => Promise<void>;
   subscribeToAdminData: () => () => void; // Returns unsubscribe function
 
+  // Notification actions
+  loadNotifications: () => Promise<void>;
+  markNotificationAsRead: (notificationId: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
+  deleteNotification: (notificationId: string) => Promise<void>;
+  subscribeToNotifications: () => () => void;
+  getUnreadNotificationCount: () => number;
+
+  // Enhanced message methods
+  sendEnhancedMessage: (conversationId: string, content: string, type?: MessageType, attachments?: MessageAttachment[], replyTo?: string) => Promise<void>;
+  addMessageReaction: (messageId: string, emoji: string) => Promise<void>;
+  removeMessageReaction: (messageId: string, emoji: string) => Promise<void>;
+  editMessage: (messageId: string, newContent: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
+  markMessagesAsRead: (conversationId: string, messageIds: string[]) => Promise<void>;
+
   // Reset
   reset: () => void;
 }
@@ -114,6 +137,9 @@ const initialState = {
   messages: {},
   activeConversation: null,
   isLoadingMessages: false,
+  notifications: [],
+  unreadNotificationCount: 0,
+  isLoadingNotifications: false,
   searchQuery: "",
   selectedCategory: "",
   selectedLocation: "",
@@ -425,7 +451,13 @@ export const useFirebaseStore = create<FirebaseState>()(
             senderId,
             content,
             timestamp: Date.now(),
-            read: false
+            read: false,
+            type: 'text' as const,
+            attachments: [],
+            reactions: [],
+            replyTo: undefined,
+            edited: false,
+            deletedAt: undefined
           };
           
           set((state) => {
@@ -451,7 +483,10 @@ export const useFirebaseStore = create<FirebaseState>()(
             participants,
             createdAt: Date.now(),
             updatedAt: Date.now(),
-            lastMessage: undefined
+            lastMessage: undefined,
+            type: 'direct' as const,
+            title: undefined,
+            metadata: {}
           };
           
           set((state) => {
@@ -580,6 +615,207 @@ export const useFirebaseStore = create<FirebaseState>()(
         return userService.subscribeToAdminData((data) => {
           set({ flaggedContent: data.flaggedContent, systemMessages: data.systemMessages });
         });
+      },
+
+      // Notification actions
+      loadNotifications: async () => {
+        try {
+          set({ isLoadingNotifications: true, error: null });
+          const state = get();
+          if (!state.currentUserProfile?.id) return;
+          
+          const notifications = await notificationService.getUserNotifications(state.currentUserProfile.id);
+          set({ notifications });
+        } catch (error: any) {
+          console.error("Error loading notifications:", error);
+          set({ error: error.message || "Failed to load notifications" });
+        } finally {
+          set({ isLoadingNotifications: false });
+        }
+      },
+
+      markNotificationAsRead: async (notificationId) => {
+        try {
+          set({ error: null });
+          await notificationService.markNotificationAsRead(notificationId);
+          
+          // Update local state
+          set((state) => {
+            const notification = state.notifications.find(n => n.id === notificationId);
+            if (notification) {
+              notification.read = true;
+            }
+          });
+        } catch (error: any) {
+          console.error("Error marking notification as read:", error);
+          set({ error: error.message || "Failed to mark notification as read" });
+        }
+      },
+
+      markAllNotificationsAsRead: async () => {
+        try {
+          set({ error: null });
+          const state = get();
+          if (!state.currentUserProfile?.id) return;
+          
+          await notificationService.markAllNotificationsAsRead(state.currentUserProfile.id);
+          
+          // Update local state
+          set((state) => {
+            state.notifications.forEach(n => {
+              n.read = true;
+            });
+          });
+        } catch (error: any) {
+          console.error("Error marking all notifications as read:", error);
+          set({ error: error.message || "Failed to mark all notifications as read" });
+        }
+      },
+
+      deleteNotification: async (notificationId) => {
+        try {
+          set({ error: null });
+          await notificationService.deleteNotification(notificationId);
+          
+          // Update local state
+          set((state) => {
+            state.notifications = state.notifications.filter(n => n.id !== notificationId);
+          });
+        } catch (error: any) {
+          console.error("Error deleting notification:", error);
+          set({ error: error.message || "Failed to delete notification" });
+        }
+      },
+
+      subscribeToNotifications: () => {
+        const state = get();
+        if (!state.currentUserProfile?.id) return () => {};
+        
+        return notificationService.subscribeToUserNotifications(state.currentUserProfile.id, (notifications: Notification[]) => {
+          set({ notifications });
+        });
+      },
+
+      getUnreadNotificationCount: () => {
+        return get().notifications.filter(n => !n.read).length;
+      },
+
+      // Enhanced message methods
+      sendEnhancedMessage: async (conversationId, content, type, attachments, replyTo) => {
+        try {
+          set({ error: null });
+          const messageId = await enhancedMessageService.sendMessage(conversationId, get().currentUserProfile?.id || "", content, type, attachments, replyTo);
+          
+          // Add to local state
+          const newMessage = {
+            id: messageId,
+            conversationId,
+            senderId: get().currentUserProfile?.id || "",
+            content,
+            timestamp: Date.now(),
+            read: false,
+            type: type || 'text',
+            attachments: attachments || [],
+            reactions: [],
+            replyTo,
+            edited: false,
+            deletedAt: undefined
+          };
+          
+          set((state) => {
+            if (!state.messages[conversationId]) {
+              state.messages[conversationId] = [];
+            }
+            state.messages[conversationId].push(newMessage);
+          });
+        } catch (error: any) {
+          console.error("Error sending enhanced message:", error);
+          set({ error: error.message || "Failed to send enhanced message" });
+        }
+      },
+
+      addMessageReaction: async (messageId, emoji) => {
+        try {
+          set({ error: null });
+          const state = get();
+          if (!state.currentUserProfile?.id) throw new Error("User not authenticated");
+          
+          await enhancedMessageService.addMessageReaction(messageId, emoji, state.currentUserProfile.id);
+          
+          // Local state will be updated via subscription
+        } catch (error: any) {
+          console.error("Error adding message reaction:", error);
+          set({ error: error.message || "Failed to add message reaction" });
+        }
+      },
+
+      removeMessageReaction: async (messageId, emoji) => {
+        try {
+          set({ error: null });
+          const state = get();
+          if (!state.currentUserProfile?.id) throw new Error("User not authenticated");
+          
+          await enhancedMessageService.removeMessageReaction(messageId, emoji, state.currentUserProfile.id);
+          
+          // Local state will be updated via subscription
+        } catch (error: any) {
+          console.error("Error removing message reaction:", error);
+          set({ error: error.message || "Failed to remove message reaction" });
+        }
+      },
+
+      editMessage: async (messageId, newContent) => {
+        try {
+          set({ error: null });
+          await enhancedMessageService.editMessage(messageId, newContent);
+          
+          // Update local state
+          set((state) => {
+            const message = state.messages[Object.keys(state.messages).find(convoId => {
+              return state.messages[convoId].find(msg => msg.id === messageId);
+            })!]?.find(msg => msg.id === messageId);
+            
+            if (message) {
+              message.content = newContent;
+              message.edited = true;
+            }
+          });
+        } catch (error: any) {
+          console.error("Error editing message:", error);
+          set({ error: error.message || "Failed to edit message" });
+        }
+      },
+
+      deleteMessage: async (messageId) => {
+        try {
+          set({ error: null });
+          await enhancedMessageService.deleteMessage(messageId);
+          
+          // Update local state
+          set((state) => {
+            Object.keys(state.messages).forEach(convoId => {
+              state.messages[convoId] = state.messages[convoId].filter(msg => msg.id !== messageId);
+            });
+          });
+        } catch (error: any) {
+          console.error("Error deleting message:", error);
+          set({ error: error.message || "Failed to delete message" });
+        }
+      },
+
+      markMessagesAsRead: async (conversationId, messageIds) => {
+        try {
+          set({ error: null });
+          const state = get();
+          if (!state.currentUserProfile?.id) throw new Error("User not authenticated");
+          
+          await enhancedMessageService.markConversationAsRead(conversationId, state.currentUserProfile.id);
+          
+          // Local state will be updated via subscription
+        } catch (error: any) {
+          console.error("Error marking messages as read:", error);
+          set({ error: error.message || "Failed to mark messages as read" });
+        }
       },
 
       // Reset
